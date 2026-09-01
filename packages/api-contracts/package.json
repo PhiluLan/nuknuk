@@ -1,0 +1,16 @@
+{
+  "name": "@nuknuk/api-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "zod": "^3.24.4"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  }
+}

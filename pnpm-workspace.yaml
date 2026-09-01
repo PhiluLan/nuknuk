@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+
+# tsx requires esbuild. Keep lifecycle-script approval explicit and minimal.
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: true

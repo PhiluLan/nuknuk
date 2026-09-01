@@ -1,0 +1,11 @@
+{
+  "name": "@nuknuk/worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  }
+}

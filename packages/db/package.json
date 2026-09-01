@@ -1,0 +1,17 @@
+{
+  "name": "@nuknuk/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@nuknuk/api-contracts": "workspace:*",
+    "@nuknuk/domain": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  }
+}

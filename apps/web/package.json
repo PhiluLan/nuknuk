@@ -1,0 +1,14 @@
+{
+  "name": "@nuknuk/web",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "@nuknuk/api-contracts": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
+  }
+}
