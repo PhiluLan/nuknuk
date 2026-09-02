@@ -3,7 +3,7 @@ import {
   createMembershipSchema,
   createTenantSchema,
   evidenceSchema,
-  organizationNodeSchema,
+  createOrganizationNodeSchema,
   provisionAgentSchema,
   stateObservationSchema,
   type CreateMembership,
@@ -44,6 +44,7 @@ export type FoundationTransaction = Readonly<{
       role: string;
       name: string;
       lifecycle: "draft" | "active" | "archived";
+      reportsToOrganizationNodeId?: string;
       actorId: string;
     }>,
   ) => Promise<string>;
@@ -116,13 +117,16 @@ export class FoundationService {
     actor: ServerActor,
     input: unknown,
   ): Promise<string> {
-    const node = organizationNodeSchema.parse(input);
+    const node = createOrganizationNodeSchema.parse(input);
     return this.transaction.createOrganizationNode({
       tenantId: node.tenantId,
       companyId: node.companyId,
       role: node.role,
       name: node.name,
-      lifecycle: node.lifecycle,
+      lifecycle: "draft",
+      ...(node.reportsToOrganizationNodeId === undefined
+        ? {}
+        : { reportsToOrganizationNodeId: node.reportsToOrganizationNodeId }),
       actorId: actor.id,
     });
   }
@@ -139,6 +143,8 @@ export class FoundationService {
   }
 }
 export const databaseBoundary = "server-only" as const;
+
+export * from "./control-plane.ts";
 
 /** DB-owned persistence inputs; these are not browser/API transport entities. */
 export type AgentRunPersistence = Readonly<{
