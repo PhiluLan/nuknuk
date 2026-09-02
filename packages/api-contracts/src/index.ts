@@ -7,6 +7,21 @@ export const tenantScopeSchema = z.object({
   companyId: opaqueId,
 });
 export const slugSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/);
+export const calendarDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const [yearText, monthText, dayText] = value.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const candidate = new Date(Date.UTC(year, month - 1, day));
+    return (
+      candidate.getUTCFullYear() === year &&
+      candidate.getUTCMonth() === month - 1 &&
+      candidate.getUTCDate() === day
+    );
+  }, "targetDate must be a real ISO-8601 calendar date");
 export const membershipRoleSchema = z.enum([
   "founder",
   "admin",
@@ -67,23 +82,62 @@ export const agentCharterSchema = tenantScopeSchema.extend({
   authorityLevel: z.enum(["L0", "L1", "L2", "L3", "L4", "human_only"]),
 });
 
+export const evidenceTypeSchema = z.enum([
+  "verified_system_data",
+  "human_input",
+  "external_source",
+  "agent_inference",
+  "insufficient_evidence",
+]);
+export const evidenceClassificationSchema = z.enum([
+  "public",
+  "internal",
+  "confidential",
+  "restricted",
+]);
+export const contentHashSchema = z
+  .object({
+    algorithm: z.literal("sha256"),
+    value: z.string().regex(/^[a-f0-9]{64}$/i),
+  })
+  .strict();
+const sourceVersionRefSchema = z
+  .string()
+  .min(1)
+  .max(1_024)
+  .refine(
+    (value) =>
+      !/(?:password|secret|api[_-]?key|access[_-]?token|bearer\s|:\/\/[^/\s:@]+:[^@\s]+@)/i.test(
+        value,
+      ),
+    "sourceVersionRef must not contain credential-shaped data",
+  );
+
 export const evidenceSchema = tenantScopeSchema.extend({
   id: opaqueId.optional(),
-  type: z.enum([
-    "verified_system_data",
-    "human_input",
-    "external_source",
-    "agent_inference",
-    "insufficient_evidence",
-  ]),
+  type: evidenceTypeSchema,
   source: z.string().min(1),
   collectedAt: isoDateTime,
   confidence: z.number().min(0).max(1),
   contentPointer: z.string().min(1),
-  classification: z
-    .enum(["public", "internal", "confidential", "restricted"])
-    .default("internal"),
+  classification: evidenceClassificationSchema.default("internal"),
 });
+
+/** CTO Decision 005: client transport only; trust-class elevation is server-governed. */
+export const recordEvidenceSchema = tenantScopeSchema
+  .extend({
+    type: evidenceTypeSchema,
+    source: z.string().min(1),
+    contentPointer: z.string().min(1),
+    collectedAt: isoDateTime,
+    confidence: z.number().min(0).max(1),
+    classification: evidenceClassificationSchema.default("internal"),
+    freshnessSeconds: z.number().int().nonnegative().optional(),
+    contentHash: contentHashSchema.optional(),
+    sourceVersionRef: sourceVersionRefSchema.optional(),
+    parentEvidenceRefs: z.array(opaqueId).max(100).default([]),
+  })
+  .strict();
 
 export const stateObservationSchema = tenantScopeSchema.extend({
   id: opaqueId.optional(),
@@ -272,6 +326,13 @@ export const createObjectiveSchema = tenantScopeSchema
     ownerOrganizationNodeId: opaqueId.optional(),
   })
   .strict();
+/** CTO Decision 005 additive objective input; CreateObjective remains frozen. */
+export const createObjectiveDetailedSchema = createObjectiveSchema
+  .extend({
+    targetDate: calendarDateSchema.optional(),
+    successMeasureRefs: z.array(opaqueId).max(100).default([]),
+  })
+  .strict();
 
 export const awaitingAuthorityViewSchema = tenantScopeSchema
   .extend({
@@ -350,6 +411,7 @@ export type CreateCompany = z.infer<typeof createCompanySchema>;
 export type CreateMembership = z.infer<typeof createMembershipSchema>;
 export type ProvisionAgent = z.infer<typeof provisionAgentSchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
+export type RecordEvidence = z.infer<typeof recordEvidenceSchema>;
 export type StateObservation = z.infer<typeof stateObservationSchema>;
 export type ActionRequest = z.infer<typeof actionRequestSchema>;
 export type AgentRuntimeOutput = z.infer<typeof agentRuntimeOutputSchema>;
@@ -358,6 +420,9 @@ export type AgentDetailView = z.infer<typeof agentDetailViewSchema>;
 export type CompanyStateCardView = z.infer<typeof companyStateCardViewSchema>;
 export type ObjectiveView = z.infer<typeof objectiveViewSchema>;
 export type CreateObjective = z.infer<typeof createObjectiveSchema>;
+export type CreateObjectiveDetailed = z.infer<
+  typeof createObjectiveDetailedSchema
+>;
 export type AwaitingAuthorityView = z.infer<typeof awaitingAuthorityViewSchema>;
 export type IntegrationConnectionView = z.infer<
   typeof integrationConnectionViewSchema

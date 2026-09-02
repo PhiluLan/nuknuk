@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createCompanySchema,
   createAgentCharterVersionSchema,
+  createObjectiveDetailedSchema,
   createMembershipSchema,
   createObjectiveSchema,
   createOrganizationNodeSchema,
@@ -15,6 +16,7 @@ import {
   objectiveViewSchema,
   organizationGraphViewSchema,
   provisionAgentSchema,
+  recordEvidenceSchema,
   stateObservationSchema,
 } from "../src/index.ts";
 
@@ -45,6 +47,73 @@ test("state observation rejects an unscoped metric", () => {
     confidence: 0.9,
   });
   assert.equal(parsed.success, false);
+});
+
+test("Decision 005 accepts detailed objectives and evidence lineage inputs", () => {
+  assert.equal(
+    createObjectiveDetailedSchema.safeParse({
+      ...scope,
+      title: "Retain customers",
+      description: "Improve monthly retention",
+      targetDate: "2026-12-31",
+      successMeasureRefs: ["metric_retention"],
+    }).success,
+    true,
+  );
+  assert.equal(
+    recordEvidenceSchema.safeParse({
+      ...scope,
+      type: "external_source",
+      source: "analytics",
+      contentPointer: "artifact://analytics/weekly",
+      collectedAt: "2026-09-02T00:00:00.000Z",
+      confidence: 0.8,
+      classification: "internal",
+      freshnessSeconds: 3600,
+      contentHash: { algorithm: "sha256", value: "a".repeat(64) },
+      sourceVersionRef: "weekly-export-v3",
+      parentEvidenceRefs: ["evidence_parent"],
+    }).success,
+    true,
+  );
+});
+
+test("Decision 005 rejects invalid dates, hashes, and credential-shaped source metadata", () => {
+  const detailed = {
+    ...scope,
+    title: "Retain customers",
+    description: "Improve monthly retention",
+    successMeasureRefs: [],
+  };
+  assert.equal(
+    createObjectiveDetailedSchema.safeParse({
+      ...detailed,
+      targetDate: "2026-02-31",
+    }).success,
+    false,
+  );
+  const evidence = {
+    ...scope,
+    type: "external_source",
+    source: "analytics",
+    contentPointer: "artifact://analytics/weekly",
+    collectedAt: "2026-09-02T00:00:00.000Z",
+    confidence: 0.8,
+  };
+  assert.equal(
+    recordEvidenceSchema.safeParse({
+      ...evidence,
+      contentHash: { algorithm: "sha256", value: "not-a-hash" },
+    }).success,
+    false,
+  );
+  assert.equal(
+    recordEvidenceSchema.safeParse({
+      ...evidence,
+      sourceVersionRef: "https://token:secret@example.test/v1",
+    }).success,
+    false,
+  );
 });
 
 test("Decision 001 transport inputs accept only client-owned fields", () => {
