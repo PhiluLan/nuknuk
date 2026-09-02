@@ -15,11 +15,13 @@ Available server methods:
 - Reads: `organizationGraph(actor, scope)`, `agentDetail(actor, scope)`,
   `companyStateCards(actor, scope)`, `objectives(actor, scope)`, and
   `awaitingAuthority(actor, scope)`.
-- Writes: `createObjective`, `recordEvidence`, and `recordStateObservation`.
+- Writes: `createObjective`, `createObjectiveDetailed`, `recordEvidence`, and
+  `recordStateObservation`.
 
 The narrow framework-neutral handlers currently mature enough for host routing are:
 
 - `POST /api/v1/objectives`
+- `POST /api/v1/objectives/detailed`
 - `POST /api/v1/evidence`
 - `POST /api/v1/state-observations`
 
@@ -38,5 +40,9 @@ strings are descriptive and do not grant browser permissions.
   the application host; Dev A does not alter Dev C-owned web code).
 - Integration connection persistence: only the safe `not_configured`,
   `server_initiated` projection seam exists.
-- Objective target date/success-measure input and extended evidence metadata await
-  [CTO Decision Request](../cto-decision-requests/dev-a-week-2-objective-evidence-inputs.md).
+- `CreateObjectiveDetailed` and `RecordEvidence` are approved by
+  [CTO Decision 005](../cto-decision-requests/dev-a-week-2-objective-evidence-inputs.md).
+  Bind them only through the authenticated server adapter. Success-measure and
+  evidence-lineage references are server-validated for tenant/company scope.
+  Browser callers cannot request `verified_system_data`; that classification needs
+  a separately configured trusted-ingestion server path.

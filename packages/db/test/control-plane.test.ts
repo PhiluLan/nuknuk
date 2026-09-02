@@ -100,6 +100,93 @@ test("objective mutation binds actor and idempotency key to the server store", a
   assert.equal(received?.idempotencyKey, "objective-001");
 });
 
+test("detailed objective preserves target date and canonical success-measure references", async () => {
+  let received: Record<string, unknown> | undefined;
+  const service = new ControlPlaneService(
+    store({
+      createObjective: async (input) => {
+        received = input;
+        return "objective_detailed";
+      },
+    }),
+  );
+  await service.createObjectiveDetailed(
+    actor,
+    {
+      ...scope,
+      title: "Retention",
+      description: "Improve monthly retention",
+      targetDate: "2026-12-31",
+      successMeasureRefs: ["metric_retention"],
+    },
+    "objective-detailed-001",
+  );
+  assert.equal(received?.targetDate, "2026-12-31");
+  assert.deepEqual(received?.successMeasureRefs, ["metric_retention"]);
+});
+
+test("evidence trust elevation and malformed lineage are denied before persistence", async () => {
+  let persisted = false;
+  const service = new ControlPlaneService(
+    store({
+      recordEvidence: async () => {
+        persisted = true;
+        return "evidence_a";
+      },
+    }),
+  );
+  await assert.rejects(
+    () =>
+      service.recordEvidence(
+        actor,
+        {
+          ...scope,
+          type: "verified_system_data",
+          source: "untrusted-client",
+          contentPointer: "artifact://untrusted",
+          collectedAt: "2026-09-02T00:00:00.000Z",
+          confidence: 1,
+        },
+        "evidence-trust-001",
+      ),
+    (error: unknown) =>
+      error instanceof ControlPlaneProblem && error.status === 403,
+  );
+  assert.equal(persisted, false);
+});
+
+test("trusted ingestion can record evidence metadata without granting authority", async () => {
+  let received: Record<string, unknown> | undefined;
+  const service = new ControlPlaneService(
+    store({
+      recordEvidence: async (input) => {
+        received = input;
+        return "evidence_a";
+      },
+    }),
+    { canRecordVerifiedSystemData: async () => true },
+  );
+  await service.recordEvidence(
+    actor,
+    {
+      ...scope,
+      type: "verified_system_data",
+      source: "trusted-ingestion",
+      contentPointer: "artifact://system/export",
+      collectedAt: "2026-09-02T00:00:00.000Z",
+      confidence: 1,
+      freshnessSeconds: 60,
+      contentHash: { algorithm: "sha256", value: "b".repeat(64) },
+      sourceVersionRef: "export-42",
+      parentEvidenceRefs: ["evidence_parent"],
+    },
+    "evidence-trusted-001",
+  );
+  assert.equal(received?.contentHash, `sha256:${"b".repeat(64)}`);
+  assert.deepEqual(received?.parentEvidenceRefs, ["evidence_parent"]);
+  assert.equal(received?.actorId, actor.id);
+});
+
 test("agent-run duplicate reservation returns the original run and does not mint another", async () => {
   const service = new ControlPlaneService(
     store({

@@ -4,12 +4,14 @@ import {
   awaitingAuthorityViewSchema,
   companyStateCardViewSchema,
   createAgentCharterVersionSchema,
+  createObjectiveDetailedSchema,
   createObjectiveSchema,
-  evidenceSchema,
   integrationConnectionViewSchema,
   objectiveViewSchema,
   organizationGraphViewSchema,
+  recordEvidenceSchema,
   stateObservationSchema,
+  type RecordEvidence,
   type AgentRuntimeOutput,
 } from "@nuknuk/api-contracts";
 import type { FoundationTransaction, ServerActor } from "./index.ts";
@@ -146,6 +148,8 @@ export type ControlPlaneStore = Readonly<{
         title: string;
         description: string;
         ownerOrganizationNodeId?: string;
+        targetDate?: string;
+        successMeasureRefs?: readonly string[];
         actorId: string;
         idempotencyKey: string;
       }>,
@@ -159,6 +163,10 @@ export type ControlPlaneStore = Readonly<{
         collectedAt: string;
         confidence: number;
         classification: string;
+        freshnessSeconds?: number;
+        contentHash?: string;
+        sourceVersionRef?: string;
+        parentEvidenceRefs: readonly string[];
         actorId: string;
         idempotencyKey: string;
       }>,
@@ -225,6 +233,17 @@ export type ControlPlaneStore = Readonly<{
     scope: Scope & Readonly<{ actorId: string }>,
   ) => Promise<readonly unknown[]>;
 }>;
+
+export type EvidenceTrustAuthorizer = Readonly<{
+  canRecordVerifiedSystemData: (
+    actor: ServerActor,
+    evidence: RecordEvidence,
+  ) => Promise<boolean>;
+}>;
+
+const denyVerifiedSystemEvidence: EvidenceTrustAuthorizer = {
+  canRecordVerifiedSystemData: async () => false,
+};
 
 /** Implement this once with the server-only Supabase RPC client in the host app. */
 export type ServerRpcClient = Readonly<{
@@ -323,15 +342,26 @@ export const createControlPlaneRpcStore = (
       .then(asId),
   createObjective: (input) =>
     rpc
-      .call<unknown>("app.create_objective", {
-        p_tenant_id: input.tenantId,
-        p_company_id: input.companyId,
-        p_title: input.title,
-        p_description: input.description,
-        p_owner_organization_node_id: input.ownerOrganizationNodeId ?? null,
-        p_actor_id: input.actorId,
-        p_idempotency_key: input.idempotencyKey,
-      })
+      .call<unknown>(
+        input.targetDate !== undefined || input.successMeasureRefs?.length
+          ? "app.create_objective_detailed"
+          : "app.create_objective",
+        {
+          p_tenant_id: input.tenantId,
+          p_company_id: input.companyId,
+          p_title: input.title,
+          p_description: input.description,
+          p_owner_organization_node_id: input.ownerOrganizationNodeId ?? null,
+          ...(input.targetDate === undefined
+            ? {}
+            : { p_target_date: input.targetDate }),
+          ...(input.successMeasureRefs === undefined
+            ? {}
+            : { p_success_measure_refs: input.successMeasureRefs }),
+          p_actor_id: input.actorId,
+          p_idempotency_key: input.idempotencyKey,
+        },
+      )
       .then(asId),
   recordEvidence: (input) =>
     rpc
@@ -344,6 +374,10 @@ export const createControlPlaneRpcStore = (
         p_collected_at: input.collectedAt,
         p_confidence: input.confidence,
         p_classification: input.classification,
+        p_freshness_seconds: input.freshnessSeconds ?? 0,
+        p_content_hash: input.contentHash ?? null,
+        p_source_version_ref: input.sourceVersionRef ?? null,
+        p_parent_evidence_refs: input.parentEvidenceRefs,
         p_actor_id: input.actorId,
         p_idempotency_key: input.idempotencyKey,
       })
@@ -469,7 +503,10 @@ export const createControlPlaneRpcStore = (
 });
 
 export class ControlPlaneService {
-  constructor(private readonly store: ControlPlaneStore) {}
+  constructor(
+    private readonly store: ControlPlaneStore,
+    private readonly evidenceTrustAuthorizer: EvidenceTrustAuthorizer = denyVerifiedSystemEvidence,
+  ) {}
 
   async createAgentCharterVersion(
     actor: ServerActor,
@@ -501,14 +538,64 @@ export class ControlPlaneService {
     });
   }
 
+  async createObjectiveDetailed(
+    actor: ServerActor,
+    input: unknown,
+    idempotencyKey: string | undefined,
+  ) {
+    const {
+      ownerOrganizationNodeId,
+      targetDate,
+      successMeasureRefs,
+      ...objective
+    } = createObjectiveDetailedSchema.parse(input);
+    return this.store.createObjective({
+      ...objective,
+      ...(ownerOrganizationNodeId === undefined
+        ? {}
+        : { ownerOrganizationNodeId }),
+      ...(targetDate === undefined ? {} : { targetDate }),
+      successMeasureRefs,
+      actorId: actor.id,
+      idempotencyKey: requireIdempotencyKey(idempotencyKey),
+    });
+  }
+
   async recordEvidence(
     actor: ServerActor,
     input: unknown,
     idempotencyKey: string | undefined,
   ) {
-    const { id: _id, ...evidence } = evidenceSchema.parse(input);
+    const evidence = recordEvidenceSchema.parse(input);
+    if (
+      evidence.type === "verified_system_data" &&
+      !(await this.evidenceTrustAuthorizer.canRecordVerifiedSystemData(
+        actor,
+        evidence,
+      ))
+    ) {
+      throw new ControlPlaneProblem(
+        403,
+        "evidence-trust-elevation-denied",
+        "Evidence trust elevation is denied",
+        "Only a trusted ingestion/control path may record verified system data.",
+      );
+    }
+    const {
+      contentHash,
+      parentEvidenceRefs,
+      freshnessSeconds,
+      sourceVersionRef,
+      ...record
+    } = evidence;
     return this.store.recordEvidence({
-      ...evidence,
+      ...record,
+      ...(contentHash === undefined
+        ? {}
+        : { contentHash: `${contentHash.algorithm}:${contentHash.value}` }),
+      ...(freshnessSeconds === undefined ? {} : { freshnessSeconds }),
+      ...(sourceVersionRef === undefined ? {} : { sourceVersionRef }),
+      parentEvidenceRefs,
       actorId: actor.id,
       idempotencyKey: requireIdempotencyKey(idempotencyKey),
     });
@@ -691,6 +778,22 @@ export const handleControlPlaneRequest = async (
         status: 201,
         body: {
           id: await service.createObjective(
+            request.actor,
+            request.body,
+            idempotencyKey,
+          ),
+        },
+        contentType: "application/json",
+      };
+    }
+    if (
+      request.method === "POST" &&
+      request.path === "/api/v1/objectives/detailed"
+    ) {
+      return {
+        status: 201,
+        body: {
+          id: await service.createObjectiveDetailed(
             request.actor,
             request.body,
             idempotencyKey,

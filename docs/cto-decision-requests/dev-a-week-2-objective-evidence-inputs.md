@@ -1,39 +1,39 @@
-# CTO Decision Request — Dev A Week 2 Objective and Evidence Inputs
+# CTO Decision 005 — Dev A Objective and Evidence Inputs
 
 ## Status
 
-**Pending CTO decision.** No canonical contract has been changed by Dev A.
+**Approved and implemented.** `CreateObjective` remains frozen and unchanged.
 
 ## Decision needed
 
-Decide whether to add the following optional fields to new, additive mutation contracts:
+Decision 005 approved the following additive canonical mutation contracts:
 
-1. `CreateObjectiveV2`: `targetDate` and `successMeasureRefs`.
-2. `RecordEvidence`: `freshnessSeconds`, `contentHash`, and lineage/source-version references.
+1. `CreateObjectiveDetailed`: the existing Objective input plus optional
+   `targetDate` (`YYYY-MM-DD`) and `successMeasureRefs` (defaulting to `[]`).
+2. `RecordEvidence`: tenant/company-scoped Evidence input with optional
+   `freshnessSeconds`, structured SHA-256 `contentHash`, opaque non-secret
+   `sourceVersionRef`, and `parentEvidenceRefs` (defaulting to `[]`).
 
 ## Why this is needed
 
-The existing, frozen `CreateObjective` contract intentionally carries only title,
-description and optional organization-node owner. The persistent Objective model
-already has `target_date` and `success_measure_refs`, but the server cannot accept
-those values through a canonical client transport shape without changing shared
-contracts.
+The existing, frozen `CreateObjective` intentionally carries only title,
+description and optional organization-node owner. `CreateObjectiveDetailed` maps
+to the same Objective application service and preserves that compatibility while
+allowing the persistent `target_date` and `success_measure_refs` fields to be set.
 
-Likewise, `evidenceSchema` is sufficient for the current server seam and
-Decision-002 classification mapping, but it omits evidence freshness, content hash
-and lineage that the Blueprint identifies as canonical evidence metadata.
+`RecordEvidence` adds the evidence freshness, content hash, source-version and
+lineage metadata required by the Blueprint without exposing persistence entities.
 
-## Safe interim behavior
+## Enforced constraints
 
-- `CreateObjective` persists title, description and owner only; target date and
-  measure references remain unset.
-- Evidence persists the frozen type/source/content-pointer/collection/confidence/
-  classification fields only.
-- Neither omission changes authority, approval, execution, tenant scope, audit, or
-  RLS behavior.
-
-## Proposed constraints if approved
-
-The new fields remain tenant/company-scoped, server-validated and audit-coupled.
-They do not introduce authority, credential, service-role, execution, or
-Backyrd-specific input. Existing frozen contracts remain compatible.
+- `targetDate` is a real ISO-8601 calendar date; success-measure references must
+  resolve to Metrics within the same tenant and company.
+- Evidence parents must resolve in the same tenant/company; self-lineage and
+  cross-scope lineage are rejected by constraints and service-owned persistence.
+- `contentHash` is only `{ algorithm: "sha256", value: <64 lowercase hex> }`.
+  Source-version metadata rejects credential-shaped values.
+- `verified_system_data` is denied by default at the application boundary. An
+  explicit trusted-ingestion authorizer is required; recording Evidence never
+  grants Authority or execution capability.
+- Each mutation remains idempotent, tenant-scoped, audit/event-coupled and
+  protected by forced RLS. Existing frozen contracts remain compatible.

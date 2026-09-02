@@ -42,3 +42,30 @@ test("week 2 migration adds service-only, idempotent, tenant-scoped control-plan
   assert.match(migration, /grant execute .* to service_role/);
   assert.doesNotMatch(migration, /grant execute .* to authenticated/);
 });
+
+test("Decision 005 migration validates scoped objective measures and immutable evidence lineage", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../../supabase/migrations/20260902200820_decision_005_objective_evidence_contracts.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(migration, /function app\.create_objective_detailed/);
+  assert.match(
+    migration,
+    /success measure reference is outside the requested tenant\/company scope/,
+  );
+  assert.match(migration, /create table public\.evidence_lineage/);
+  assert.match(migration, /check \(evidence_id <> parent_evidence_id\)/);
+  assert.match(
+    migration,
+    /parent evidence reference is outside the requested tenant\/company scope/,
+  );
+  assert.match(migration, /evidence cannot reference itself as lineage/);
+  assert.match(migration, /content hash must be a sha256 hex digest/);
+  assert.match(
+    migration,
+    /alter table public\.evidence_lineage force row level security;/,
+  );
+});
