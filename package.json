@@ -11,7 +11,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "format": "prettier --write apps/web/src apps/web/*.md apps/web/*.json packages/api-contracts/src/index.ts packages/api-contracts/test/contracts.test.ts docs/cto-decision-requests/dev-c-week-2-product-view-contracts.md docs/reviews/dev-c-night-report.md docs/reviews/dev-c-decision-003-closeout.md",
+    "format": "prettier --write apps/web/src apps/web/*.md apps/web/*.json packages/api-contracts/src/index.ts packages/api-contracts/test/contracts.test.ts docs/cto-decision-requests/004-product-presentation-fields.md docs/cto-decision-requests/dev-c-week-2-product-view-contracts.md docs/reviews/dev-c-night-report.md docs/reviews/dev-c-decision-003-closeout.md docs/reviews/dev-c-week-2-real-binding-report.md",
     "format:check": "prettier --check ."
   },
   "devDependencies": {

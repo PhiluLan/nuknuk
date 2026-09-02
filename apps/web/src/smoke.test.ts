@@ -9,7 +9,9 @@ import {
   organizationGraphViewSchema,
 } from "@nuknuk/api-contracts";
 import {
+  ApiProductService,
   FixtureProductService,
+  ProductApiError,
   renderProduct,
   renderProposal,
   renderShell,
@@ -102,6 +104,101 @@ test("fixture ProductService implements the approved Decision-003 view boundary"
     ),
     true,
   );
+});
+
+test("API ProductService parses server views and sends only scoped approved mutations", async () => {
+  const fixture = new FixtureProductService();
+  const snapshot = await fixture.getSnapshot();
+  const scope = { tenantId: snapshot.tenantId, companyId: snapshot.company.id };
+  const posted: unknown[] = [];
+  const service = new ApiProductService(
+    {
+      get: async (path) => {
+        if (path === "/organization")
+          return fixture.getOrganizationGraph(scope);
+        if (path === "/company-state")
+          return fixture.getCompanyStateCards(scope);
+        if (path === "/objectives") return fixture.listObjectives(scope);
+        if (path === "/attention") return fixture.listAwaitingAuthority(scope);
+        if (path === "/integrations")
+          return fixture.listIntegrationConnections(scope);
+        return fixture.getAgentDetail({
+          ...scope,
+          agentId: path.slice("/agents/".length),
+        });
+      },
+      post: async (_path, body) => {
+        posted.push(body);
+        return {};
+      },
+    },
+    {
+      bootstrapFounder: "/bootstrap",
+      memberships: "/memberships",
+      organizationGraph: "/organization",
+      organizationNodes: "/organization/nodes",
+      agentCharterVersions: "/charters",
+      agents: "/agents",
+      agentDetail: (agentId) => `/agents/${agentId}`,
+      companyStateCards: "/company-state",
+      objectives: "/objectives",
+      awaitingAuthority: "/attention",
+      integrations: "/integrations",
+    },
+    { tenantId: scope.tenantId, company: snapshot.company },
+  );
+  assert.equal(
+    (await service.getSnapshot()).agents.length,
+    snapshot.agents.length,
+  );
+  await service.createObjective({
+    ...scope,
+    title: "Review activation",
+    description: "Create a scoped review",
+  });
+  assert.deepEqual(posted[0], {
+    ...scope,
+    title: "Review activation",
+    description: "Create a scoped review",
+  });
+});
+
+test("API ProductService rejects a syntactically valid cross-tenant projection", async () => {
+  const fixture = new FixtureProductService();
+  const snapshot = await fixture.getSnapshot();
+  const scope = { tenantId: snapshot.tenantId, companyId: snapshot.company.id };
+  const service = new ApiProductService(
+    {
+      get: async () => ({
+        ...(await fixture.getOrganizationGraph(scope)),
+        tenantId: "tenant_other",
+      }),
+      post: async () => ({}),
+    },
+    {
+      bootstrapFounder: "/bootstrap",
+      memberships: "/memberships",
+      organizationGraph: "/organization",
+      organizationNodes: "/organization/nodes",
+      agentCharterVersions: "/charters",
+      agents: "/agents",
+      agentDetail: (agentId) => `/agents/${agentId}`,
+      companyStateCards: "/company-state",
+      objectives: "/objectives",
+      awaitingAuthority: "/attention",
+      integrations: "/integrations",
+    },
+    { tenantId: scope.tenantId, company: snapshot.company },
+  );
+  await assert.rejects(
+    () => service.getOrganizationGraph(scope),
+    ProductApiError,
+  );
+});
+
+test("API error status remains distinguishable for route-level unauthorized handling", () => {
+  const error = new ProductApiError("Forbidden", 403);
+  assert.equal(error.status, 403);
 });
 
 test("shell exposes explicit unavailable states", () => {

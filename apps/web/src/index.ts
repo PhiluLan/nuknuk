@@ -550,6 +550,15 @@ const stateMessage = (state: ScreenState): string =>
     ready: "",
   })[state];
 
+const errorScreenState = (error: unknown): ScreenState =>
+  typeof error === "object" &&
+  error !== null &&
+  "status" in error &&
+  ((error as { status?: unknown }).status === 401 ||
+    (error as { status?: unknown }).status === 403)
+    ? "unauthorized"
+    : "error";
+
 const routeLabel = (route: Route): string =>
   navigation.find(([target]) => target === route)?.[1] ??
   (route === "/onboarding"
@@ -682,8 +691,12 @@ export class ProductApp {
         ? renderAgentDetail(snapshot, this.agentId)
         : renderProduct(this.route, snapshot);
       this.bindForms();
-    } catch {
-      this.root.innerHTML = renderShell(this.route, "", "error");
+    } catch (error) {
+      this.root.innerHTML = renderShell(
+        this.route,
+        "",
+        errorScreenState(error),
+      );
     }
   }
 
@@ -747,8 +760,19 @@ export class ProductApp {
         });
         await this.navigate();
       }
-    } catch {
-      this.root.innerHTML = renderShell(this.route, "", "error");
+    } catch (error) {
+      this.root.innerHTML = renderShell(
+        this.route,
+        "",
+        errorScreenState(error),
+      );
     }
   }
 }
+
+export { ApiProductService, ProductApiError } from "./api-product-service.ts";
+export type {
+  ProductApiContext,
+  ProductApiRoutes,
+  ProductApiTransport,
+} from "./api-product-service.ts";
