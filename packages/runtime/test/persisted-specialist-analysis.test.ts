@@ -116,6 +116,7 @@ test("persisted specialist flow requests reservation, manifest, usage, and await
     },
     scope,
     triggerRef: "trigger_1",
+    auditCorrelationId: "correlation_1",
   });
   assert.equal(result.state, "awaiting_authority");
   assert.deepEqual(boundary.calls, [
@@ -152,6 +153,7 @@ test("persistence handoff failure is failed and never returns a proposal", async
     },
     scope,
     triggerRef: "trigger_1",
+    auditCorrelationId: "correlation_1",
   });
   assert.equal(result.state, "failed");
   assert.equal(result.output, undefined);

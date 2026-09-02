@@ -12,6 +12,7 @@ export interface AgentRunApplicationService {
       runId: string;
       idempotencyKey: string;
       triggerRef: string;
+      auditCorrelationId: string;
     }>,
   ): Promise<Readonly<{ accepted: boolean; existingRunId: string }>>;
   persistContextManifest(
@@ -19,6 +20,7 @@ export interface AgentRunApplicationService {
       scope: RunScope;
       runId: string;
       manifest: RunContextManifest;
+      auditCorrelationId: string;
     }>,
   ): Promise<Readonly<{ manifestRef: string }>>;
   transitionRun(
@@ -26,6 +28,7 @@ export interface AgentRunApplicationService {
       scope: RunScope;
       runId: string;
       state: RunResult["state"];
+      auditCorrelationId: string;
       contextManifestRef?: string;
       failureReason?: string;
     }>,
@@ -34,6 +37,7 @@ export interface AgentRunApplicationService {
     input: Readonly<{
       scope: RunScope;
       runId: string;
+      auditCorrelationId: string;
       inputTokens: number;
       outputTokens: number;
       estimatedCostCents: number;

@@ -18,6 +18,7 @@ export class PersistedSpecialistAnalysisFlow {
       queuedRun: Omit<QueuedRun, "manifest" | "context">;
       scope: ContextBuildInput["scope"];
       triggerRef: string;
+      auditCorrelationId: string;
     }>,
   ): Promise<RunResult> {
     const reservation = await this.applicationService.reserveRun({
@@ -25,6 +26,7 @@ export class PersistedSpecialistAnalysisFlow {
       runId: input.queuedRun.id,
       idempotencyKey: input.queuedRun.idempotencyKey,
       triggerRef: input.triggerRef,
+      auditCorrelationId: input.auditCorrelationId,
     });
     if (!reservation.accepted)
       return failedResult(
@@ -49,18 +51,21 @@ export class PersistedSpecialistAnalysisFlow {
         scope: contextInput.scope,
         runId: input.queuedRun.id,
         state: "assembling_context",
+        auditCorrelationId: input.auditCorrelationId,
       });
       const context = await this.contextBuilder.build(contextInput);
       const stored = await this.applicationService.persistContextManifest({
         scope: contextInput.scope,
         runId: input.queuedRun.id,
         manifest: context.manifest,
+        auditCorrelationId: input.auditCorrelationId,
       });
       await this.applicationService.transitionRun({
         scope: contextInput.scope,
         runId: input.queuedRun.id,
         state: "running",
         contextManifestRef: stored.manifestRef,
+        auditCorrelationId: input.auditCorrelationId,
       });
       const result = await this.executor.execute({
         ...input.queuedRun,
@@ -71,6 +76,7 @@ export class PersistedSpecialistAnalysisFlow {
         await this.applicationService.recordUsage({
           scope: input.scope,
           runId: result.runId,
+          auditCorrelationId: input.auditCorrelationId,
           ...result.usage,
         });
       await this.applicationService.transitionRun({
@@ -78,6 +84,7 @@ export class PersistedSpecialistAnalysisFlow {
         runId: result.runId,
         state: result.state,
         contextManifestRef: stored.manifestRef,
+        auditCorrelationId: input.auditCorrelationId,
         ...(result.failureReason
           ? { failureReason: result.failureReason }
           : {}),
