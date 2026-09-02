@@ -249,6 +249,7 @@ export const companyStateCardViewSchema = tenantScopeSchema
     metricKey: z.string().regex(/^[a-z][a-z0-9_]{1,62}$/),
     label: z.string().min(1).max(256),
     displayValue: z.string().min(1).max(2_000),
+    unit: z.string().min(1).max(64),
     source: z.string().min(1).max(512),
     observedAt: isoDateTime.optional(),
     freshness: z.enum(["fresh", "stale", "unknown"]),
@@ -313,6 +314,7 @@ export const integrationConnectionViewSchema = tenantScopeSchema
   .extend({
     id: opaqueId,
     name: z.string().min(1).max(256),
+    provider: z.string().min(1).max(256),
     capabilities: z.array(z.string().min(1).max(512)).max(100),
     scopeSummary: z.string().min(1).max(2_000),
     health: z.enum([
@@ -322,6 +324,7 @@ export const integrationConnectionViewSchema = tenantScopeSchema
       "degraded",
       "revoked",
     ]),
+    lastSyncAt: isoDateTime.nullable().optional(),
     connectionFlow: z.literal("server_initiated"),
   })
   .strict();

@@ -2,7 +2,7 @@
 
 ## Status
 
-Requested; no canonical contract was changed.
+Approved by CTO Decision 004 on 2026-09-02.
 
 ## Decision needed
 

@@ -266,6 +266,7 @@ export class ApiProductService implements ProductService {
         id: card.id,
         label: card.label,
         value: card.displayValue,
+        unit: card.unit,
         source: card.source,
         observedAt: card.observedAt ?? "Not observed",
         freshness: card.freshness,
@@ -281,6 +282,7 @@ export class ApiProductService implements ProductService {
       integrations: integrations.map((integration) => ({
         id: integration.id,
         name: integration.name,
+        provider: integration.provider,
         capability: integration.capabilities.join(", "),
         scope: integration.scopeSummary,
         health:
@@ -290,6 +292,7 @@ export class ApiProductService implements ProductService {
                 integration.health === "revoked"
               ? "not_configured"
               : integration.health,
+        lastSyncAt: integration.lastSyncAt ?? null,
       })),
       founderAttention: attention.map((view) => ({
         state: view.state,

@@ -59,6 +59,20 @@ test("company state distinguishes stale and unknown values", async () => {
   );
   assert.match(view, /card--stale/);
   assert.match(view, /card--unknown/);
+  assert.match(view, /percent/);
+});
+
+test("integration presentation shows descriptive provider and an absent sync without credential data", async () => {
+  const view = renderProduct(
+    "/integrations",
+    await new FixtureProductService().getSnapshot(),
+  );
+  assert.match(view, /Provider: Example provider/);
+  assert.match(view, /Last sync: No known sync/);
+  assert.doesNotMatch(
+    view,
+    /secret_[a-z0-9]+|token_[a-z0-9]+|credential_[a-z0-9]+/i,
+  );
 });
 
 test("fixture ProductService implements the approved Decision-003 view boundary", async () => {
