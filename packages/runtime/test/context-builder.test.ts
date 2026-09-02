@@ -96,7 +96,7 @@ const output = (evidenceRefs = [freshEvidence.id]): AgentRuntimeOutput => ({
   recommendations: [{ summary: "Review quality trend" }],
   proposed_tasks: [{ title: "Investigate quality" }],
   proposed_actions: [],
-  uncertainty: [],
+  uncertainty: [{ type: "stale_evidence" }],
   overall_confidence: 0.9,
   generated_at: "2026-08-30T10:00:00.000Z",
 });

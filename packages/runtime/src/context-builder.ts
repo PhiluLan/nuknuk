@@ -16,6 +16,7 @@ export type ContextEvidence = Readonly<{
   collectedAt: string;
   freshnessSeconds: number;
   confidence: number;
+  conflictsWith?: readonly string[];
 }>;
 export type CompanyStateInput = Readonly<{
   id: string;
@@ -24,6 +25,7 @@ export type CompanyStateInput = Readonly<{
   value: string | number | boolean;
   observedAt: string;
   evidenceRefs: readonly string[];
+  freshnessSeconds?: number;
 }>;
 export type ScopedContextItem = Readonly<{
   id: string;
@@ -84,9 +86,14 @@ export type AssembledRunContext = Readonly<{
   manifest: RunContextManifest;
   sources: readonly ContextSource[];
   evidence: readonly ContextEvidence[];
+  uncertainty: readonly ContextUncertainty[];
   omittedSourceIds: readonly string[];
   modelPolicy: RunModelPolicy;
   outputSchemaName: "AgentRuntimeOutput";
+}>;
+export type ContextUncertainty = Readonly<{
+  type: "missing_evidence" | "stale_evidence" | "conflicting_evidence";
+  sourceRefs: readonly string[];
 }>;
 
 export class ContextBuilder {
@@ -144,10 +151,15 @@ export class ContextBuilder {
       evidence_refs: evidenceRefs,
       sources: compacted.included,
     });
+    const includedEvidence = scopedEvidence.filter((item) =>
+      evidenceRefs.includes(item.id),
+    );
+    const uncertainty = deriveUncertainty(state, includedEvidence, input.asOf);
     return Object.freeze({
       manifest,
       sources: compacted.included,
       evidence: Object.freeze(scopedEvidence),
+      uncertainty: Object.freeze(uncertainty),
       omittedSourceIds: compacted.omitted.map((item) => item.id),
       modelPolicy: input.modelPolicy,
       outputSchemaName: "AgentRuntimeOutput",
@@ -233,6 +245,49 @@ const evidenceRank = (item: ContextEvidence, asOf: string) =>
 const isFresh = (item: ContextEvidence, asOf: string) =>
   Date.parse(item.collectedAt) + item.freshnessSeconds * 1_000 >=
   Date.parse(asOf);
+const deriveUncertainty = (
+  state: readonly CompanyStateInput[],
+  evidence: readonly ContextEvidence[],
+  asOf: string,
+): readonly ContextUncertainty[] => {
+  const result: ContextUncertainty[] = [];
+  const evidenceIds = new Set(evidence.map((item) => item.id));
+  const missing = state
+    .flatMap((item) => item.evidenceRefs)
+    .filter((id) => !evidenceIds.has(id));
+  if (missing.length > 0 || evidence.length === 0)
+    result.push({
+      type: "missing_evidence",
+      sourceRefs: Object.freeze(missing),
+    });
+  const stale = evidence
+    .filter((item) => !isFresh(item, asOf))
+    .map((item) => item.id);
+  const staleState = state
+    .filter(
+      (item) =>
+        item.freshnessSeconds !== undefined &&
+        Date.parse(item.observedAt) + item.freshnessSeconds * 1_000 <
+          Date.parse(asOf),
+    )
+    .map((item) => item.id);
+  if (stale.length > 0 || staleState.length > 0)
+    result.push({
+      type: "stale_evidence",
+      sourceRefs: Object.freeze([...stale, ...staleState].sort()),
+    });
+  const conflicting = evidence
+    .filter((item) =>
+      item.conflictsWith?.some((other) => evidenceIds.has(other)),
+    )
+    .map((item) => item.id);
+  if (conflicting.length > 0)
+    result.push({
+      type: "conflicting_evidence",
+      sourceRefs: Object.freeze(conflicting.sort()),
+    });
+  return Object.freeze(result);
+};
 const sameCompany = (
   left: Pick<RunScope, "tenantId" | "companyId">,
   right: RunScope,
