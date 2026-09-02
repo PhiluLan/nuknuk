@@ -315,6 +315,7 @@ test("Decision 003 product projections accept scoped, denormalized business view
       metricKey: "weekly_activation",
       label: "Weekly activation",
       displayValue: "42%",
+      unit: "percent",
       source: "Verified system data",
       freshness: "unknown",
       confidence: null,
@@ -337,9 +338,11 @@ test("Decision 003 product projections accept scoped, denormalized business view
       ...scope,
       id: "integration_1",
       name: "Example",
+      provider: "Example provider",
       capabilities: ["Read account status"],
       scopeSummary: "Selected workspace",
       health: "not_configured",
+      lastSyncAt: null,
       connectionFlow: "server_initiated",
     }).success,
     true,
@@ -412,11 +415,56 @@ test("Decision 003 rejects unscoped, authority, credential, and execution-shaped
       ...scope,
       id: "integration_1",
       name: "Example",
+      provider: "Example provider",
+      capabilities: ["Read"],
+      scopeSummary: "Workspace",
+      health: "active",
+      lastSyncAt: "2026-09-02T10:00:00.000Z",
+      connectionFlow: "server_initiated",
+      token: "forbidden",
+    }).success,
+    false,
+  );
+});
+
+test("Decision 004 requires a separate unit and safely permits an absent sync timestamp", () => {
+  assert.equal(
+    companyStateCardViewSchema.safeParse({
+      ...scope,
+      id: "state_1",
+      metricKey: "weekly_activation",
+      label: "Weekly activation",
+      displayValue: "42",
+      source: "Verified system data",
+      freshness: "fresh",
+      confidence: 0.9,
+    }).success,
+    false,
+  );
+  assert.equal(
+    integrationConnectionViewSchema.safeParse({
+      ...scope,
+      id: "integration_1",
+      name: "Example",
+      provider: "Example provider",
       capabilities: ["Read"],
       scopeSummary: "Workspace",
       health: "active",
       connectionFlow: "server_initiated",
-      token: "forbidden",
+    }).success,
+    true,
+  );
+  assert.equal(
+    integrationConnectionViewSchema.safeParse({
+      ...scope,
+      id: "integration_1",
+      name: "Example",
+      provider: "Example provider",
+      capabilities: ["Read"],
+      scopeSummary: "Workspace",
+      health: "active",
+      lastSyncAt: "not-a-date",
+      connectionFlow: "server_initiated",
     }).success,
     false,
   );

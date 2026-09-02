@@ -67,6 +67,7 @@ export type CompanyStateCardView = Readonly<{
   id: string;
   label: string;
   value: string;
+  unit: string;
   source: string;
   observedAt: string;
   freshness: "fresh" | "stale" | "unknown";
@@ -82,9 +83,11 @@ export type ObjectiveView = Readonly<{
 export type IntegrationView = Readonly<{
   id: string;
   name: string;
+  provider: string;
   capability: string;
   scope: string;
   health: "healthy" | "degraded" | "not_configured";
+  lastSyncAt: string | null;
 }>;
 export type RuntimeProposalView = Readonly<{
   state: "awaiting_authority";
@@ -264,6 +267,7 @@ export class FixtureProductService implements ProductService {
         id: "state_activation",
         label: "Weekly activation",
         value: "42%",
+        unit: "percent",
         source: "Verified system data",
         observedAt: "2026-08-30T16:00:00.000Z",
         freshness: "fresh",
@@ -273,6 +277,7 @@ export class FixtureProductService implements ProductService {
         id: "state_retention",
         label: "Retention cohort",
         value: "Unknown",
+        unit: "percent",
         source: "No current observation",
         observedAt: "Not observed",
         freshness: "unknown",
@@ -282,6 +287,7 @@ export class FixtureProductService implements ProductService {
         id: "state_pipeline",
         label: "Pipeline coverage",
         value: "3.1×",
+        unit: "multiple",
         source: "External information",
         observedAt: "2026-08-25T09:00:00.000Z",
         freshness: "stale",
@@ -301,9 +307,11 @@ export class FixtureProductService implements ProductService {
       {
         id: "integration_fixture_1",
         name: "Example integration",
+        provider: "Example provider",
         capability: "Read account status",
         scope: "Selected workspace",
         health: "not_configured",
+        lastSyncAt: null,
       },
     ],
     founderAttention: [{ state: "awaiting_authority", output: sampleOutput }],
@@ -390,6 +398,7 @@ export class FixtureProductService implements ProductService {
       metricKey: card.id.replace("state_", ""),
       label: card.label,
       displayValue: card.value,
+      unit: card.unit,
       source: card.source,
       ...(card.observedAt === "Not observed"
         ? {}
@@ -432,9 +441,11 @@ export class FixtureProductService implements ProductService {
       ...scope,
       id: integration.id,
       name: integration.name,
+      provider: integration.provider,
       capabilities: [integration.capability],
       scopeSummary: integration.scope,
       health: integration.health === "healthy" ? "active" : integration.health,
+      lastSyncAt: integration.lastSyncAt,
       connectionFlow: "server_initiated",
     }));
   }
@@ -550,6 +561,15 @@ const stateMessage = (state: ScreenState): string =>
     ready: "",
   })[state];
 
+const errorScreenState = (error: unknown): ScreenState =>
+  typeof error === "object" &&
+  error !== null &&
+  "status" in error &&
+  ((error as { status?: unknown }).status === 401 ||
+    (error as { status?: unknown }).status === 403)
+    ? "unauthorized"
+    : "error";
+
 const routeLabel = (route: Route): string =>
   navigation.find(([target]) => target === route)?.[1] ??
   (route === "/onboarding"
@@ -576,7 +596,7 @@ const confidence = (value: number | null): string =>
     : `Confidence ${Math.round(value * 100)}%`;
 
 const renderStateCard = (card: CompanyStateCardView): string =>
-  `<article class="card card--${card.freshness}"><span class="badge badge--${card.freshness === "fresh" ? "fact" : "unknown"}">${card.freshness}</span><h3>${escapeHtml(card.label)}</h3><p>${escapeHtml(card.value)}</p><span>${escapeHtml(card.source)} · ${escapeHtml(card.observedAt)} · ${confidence(card.confidence)}</span></article>`;
+  `<article class="card card--${card.freshness}"><span class="badge badge--${card.freshness === "fresh" ? "fact" : "unknown"}">${card.freshness}</span><h3>${escapeHtml(card.label)}</h3><p>${escapeHtml(card.value)} <span class="muted">${escapeHtml(card.unit)}</span></p><span>${escapeHtml(card.source)} · ${escapeHtml(card.observedAt)} · ${confidence(card.confidence)}</span></article>`;
 
 const claimLabel: Record<
   AgentRuntimeOutput["claims"][number]["classification"],
@@ -628,7 +648,7 @@ export const renderProduct = (
     "/objectives": `<section><h2>Objectives</h2><ul>${snapshot.objectives.map((objective) => `<li><strong>${escapeHtml(objective.title)}</strong><span>${objective.status} · ${escapeHtml(objective.owner)} · ${escapeHtml(objective.description)}</span></li>`).join("")}</ul><form data-action="objective"><label>Objective title<input required name="title" /></label><label>Description<textarea required name="description"></textarea></label><button>Create draft objective</button></form></section>`,
     "/company-state": `<p>State is presented with source, observed timestamp, freshness and confidence. Stale and unknown observations are intentionally distinct.</p><div class="grid">${snapshot.stateCards.map(renderStateCard).join("")}</div>`,
     "/command-center": `<div class="grid summary-grid"><article class="card"><h2>How is the company doing?</h2><p>${escapeHtml(snapshot.stateCards[0]?.value ?? "Unknown")}</p></article><article class="card"><h2>What changed?</h2><p>${snapshot.stateCards.filter((card) => card.freshness !== "fresh").length} state signals need context.</p></article><article class="card"><h2>What is the organization doing?</h2><p>${snapshot.agents.length} agent view(s) available.</p></article><article class="card card--attention"><h2>What needs Founder attention?</h2><p>${snapshot.founderAttention.length} proposal(s) awaiting authority.</p></article><article class="card"><h2>What should the Founder know next?</h2><p>Evidence-backed recommendations remain proposals.</p></article></div>${snapshot.founderAttention.map(renderProposal).join("")}`,
-    "/integrations": `<p>Connection setup is delegated to a server-side flow. This surface never receives or stores raw credentials.</p><ul>${snapshot.integrations.map((integration) => `<li><strong>${escapeHtml(integration.name)}</strong><span>Capability: ${escapeHtml(integration.capability)} · Scope: ${escapeHtml(integration.scope)} · Health: ${integration.health}</span><button type="button" disabled aria-describedby="integration-note">Configure when server flow is available</button></li>`).join("")}</ul><p id="integration-note">Configuration is unavailable until the reviewed server-side integration contract exists.</p>`,
+    "/integrations": `<p>Connection setup is delegated to a server-side flow. This surface never receives or stores raw credentials.</p><ul>${snapshot.integrations.map((integration) => `<li><strong>${escapeHtml(integration.name)}</strong><span>Provider: ${escapeHtml(integration.provider)} · Capability: ${escapeHtml(integration.capability)} · Scope: ${escapeHtml(integration.scope)} · Health: ${integration.health} · Last sync: ${escapeHtml(integration.lastSyncAt ?? "No known sync")}</span><button type="button" disabled aria-describedby="integration-note">Configure when server flow is available</button></li>`).join("")}</ul><p id="integration-note">Configuration is unavailable until the reviewed server-side integration contract exists.</p>`,
   };
   return renderShell(
     route,
@@ -682,8 +702,12 @@ export class ProductApp {
         ? renderAgentDetail(snapshot, this.agentId)
         : renderProduct(this.route, snapshot);
       this.bindForms();
-    } catch {
-      this.root.innerHTML = renderShell(this.route, "", "error");
+    } catch (error) {
+      this.root.innerHTML = renderShell(
+        this.route,
+        "",
+        errorScreenState(error),
+      );
     }
   }
 
@@ -747,8 +771,19 @@ export class ProductApp {
         });
         await this.navigate();
       }
-    } catch {
-      this.root.innerHTML = renderShell(this.route, "", "error");
+    } catch (error) {
+      this.root.innerHTML = renderShell(
+        this.route,
+        "",
+        errorScreenState(error),
+      );
     }
   }
 }
+
+export { ApiProductService, ProductApiError } from "./api-product-service.ts";
+export type {
+  ProductApiContext,
+  ProductApiRoutes,
+  ProductApiTransport,
+} from "./api-product-service.ts";
