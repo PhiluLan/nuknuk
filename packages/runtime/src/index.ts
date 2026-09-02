@@ -125,6 +125,11 @@ export type RunResult = Readonly<{
   output?: AgentRuntimeOutput;
   failureReason?: string;
   costCents: number;
+  usage?: Readonly<{
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostCents: number;
+  }>;
 }>;
 
 /** A durable adapter will replace this in-memory seam once Dev A's persistence contract is reviewed. */
@@ -200,6 +205,8 @@ export class AgentRunExecutor {
           trace,
           response.estimatedCostCents,
           "cost_cap_exceeded",
+          undefined,
+          normalizedUsage(response),
         );
       const canonical = validateCanonicalRuntimeOutput(
         response.output,
@@ -212,6 +219,22 @@ export class AgentRunExecutor {
           trace,
           response.estimatedCostCents,
           `invalid_output:${canonical.issues.join(",")}`,
+          undefined,
+          normalizedUsage(response),
+        );
+      const missingUncertainty = requiredContextUncertainty(
+        canonical.data,
+        run.context,
+      );
+      if (missingUncertainty.length > 0)
+        return result(
+          run,
+          "failed",
+          trace,
+          response.estimatedCostCents,
+          `invalid_output:missing_context_uncertainty:${missingUncertainty.join(",")}`,
+          undefined,
+          normalizedUsage(response),
         );
       const parsed = run.outputSchema?.safeParse(canonical.data) ?? canonical;
       if (!parsed.success)
@@ -221,6 +244,8 @@ export class AgentRunExecutor {
           trace,
           response.estimatedCostCents,
           `invalid_output:${parsed.issues.join(",")}`,
+          undefined,
+          normalizedUsage(response),
         );
       return result(
         run,
@@ -229,6 +254,7 @@ export class AgentRunExecutor {
         response.estimatedCostCents,
         undefined,
         parsed.data,
+        normalizedUsage(response),
       );
     } catch (error) {
       if (cancellationSignal?.aborted)
@@ -272,6 +298,7 @@ const result = (
   costCents: number,
   failureReason?: string,
   output?: AgentRuntimeOutput,
+  usage?: RunResult["usage"],
 ): RunResult =>
   Object.freeze({
     runId: run.id,
@@ -284,6 +311,7 @@ const result = (
     ...(output === undefined ? {} : { output }),
     ...(failureReason ? { failureReason } : {}),
     costCents,
+    ...(usage ? { usage } : {}),
   });
 const requireScope = (scope: RunScope): void => {
   if (!scope.tenantId || !scope.companyId || !scope.agentId)
@@ -334,6 +362,22 @@ const validateRun = (run: QueuedRun): void => {
   )
     throw new Error("Invalid model policy");
 };
+const requiredContextUncertainty = (
+  output: AgentRuntimeOutput,
+  context?: AssembledRunContext,
+) => {
+  if (!context) return [];
+  const outputTypes = new Set(output.uncertainty.map((item) => item.type));
+  return context.uncertainty
+    .map((item) => item.type)
+    .filter((type) => !outputTypes.has(type));
+};
+const normalizedUsage = (response: StructuredGenerationResult) =>
+  Object.freeze({
+    inputTokens: response.inputTokens,
+    outputTokens: response.outputTokens,
+    estimatedCostCents: response.estimatedCostCents,
+  });
 
 export { ContextBuilder } from "./context-builder.ts";
 export type {
@@ -353,3 +397,8 @@ export type {
   ExecutiveSynthesisInput,
   SpecialistProposal,
 } from "./executive-cycle.ts";
+export { PersistedSpecialistAnalysisFlow } from "./persisted-specialist-analysis.ts";
+export type {
+  AgentRunApplicationService,
+  CompanyIntelligenceContextService,
+} from "./application-boundary.ts";

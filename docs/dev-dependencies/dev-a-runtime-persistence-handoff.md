@@ -2,15 +2,16 @@
 
 ## Status
 
-Required before runtime proposals can become durable product records. Dev B has intentionally not implemented these concerns.
+The runtime now exposes `AgentRunApplicationService`, a service-facing adapter that mirrors this handoff without importing `@nuknuk/db`. Dev A supplies its server-side implementation.
 
 ## Requested contracts
 
-1. **AgentRun persistence:** tenant/company/agent-scoped record, canonical lifecycle transition ownership, trigger/purpose, manifest reference/hash, and run correlation ID.
-2. **Idempotency reservation:** atomic tenant/company/agent-scoped reservation keyed by the trigger idempotency key; returns existing run ID on duplicate without allowing a second run.
-3. **Usage ledger:** immutable server-side usage/cost append interface associated with the persisted run and provider normalized units.
-4. **Audit/event append:** immutable server-side audit and outbox interface for run creation, terminal transitions, and output handoff. The runtime must not write these directly.
-5. **Proposal handoff:** an application service that validates `AgentRuntimeOutput` scope and then routes recommendations/proposed tasks/proposed actions to control-plane evaluation. It must not create a Decision or Action from runtime output automatically.
+1. **Run reservation:** atomically reserve `(tenant_id, company_id, agent_id, run_id, idempotency_key, trigger_ref, audit_correlation_id)` and return the existing run ID for a duplicate.
+2. **Lifecycle transition:** atomically persist only reviewed lifecycle transitions with the same scope and audit correlation.
+3. **Context manifest pointer:** persist only a pointer/hash and evidence references; never raw prompts, provider payloads, or secrets.
+4. **Usage persistence:** append normalized input tokens, output tokens, and estimated cost under the same scope/run/audit correlation.
+5. **Awaiting-authority persistence:** write a validated proposal only after the runtime has reached `awaiting_authority`; no automatic Decision or Action creation.
+6. **Audit correlation:** couple reservation, transitions, manifest pointer, usage, and proposal handoff to the supplied immutable correlation ID.
 
 ## Exact boundary
 
